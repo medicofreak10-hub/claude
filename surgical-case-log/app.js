@@ -119,6 +119,7 @@ async function reload() {
   renderList();
   renderDashboard();
   updateExportScope();
+  if (typeof oldPack !== 'undefined' && oldPack) updateOldCard();
 }
 
 function filtersActive() {
@@ -1157,6 +1158,70 @@ $('#templateBtn').addEventListener('click', async () => {
   await saveBlob(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'surgical-case-log-template.xlsx');
 });
 
+
+/* ---------- Built-in encrypted import of old logbooks ---------- */
+const OLD_URL = 'data/old-cases.enc.json';
+let oldPack = null;
+const b64bytes = s => Uint8Array.from(atob(s), ch => ch.charCodeAt(0));
+
+async function loadOldPack() {
+  try {
+    const res = await fetch(OLD_URL, { cache: 'no-cache' });
+    if (!res.ok) return;
+    oldPack = await res.json();
+  } catch { return; }
+  updateOldCard();
+}
+function updateOldCard() {
+  if (!oldPack || !window.crypto || !crypto.subtle) return;
+  const done = prefGet('oldImported', false);
+  $('#oldCard').hidden = false;
+  $('#oldInfo').textContent = done
+    ? `Imported. Tap again only if cases are missing (duplicates are skipped).`
+    : `${oldPack.count} cases from your AIIMS BBN and Hexa Health logbooks, stored encrypted. You'll need the passcode Claude gave you.`;
+  $('#oldBtn').textContent = done ? 'Import again' : `Import my ${oldPack.count} old cases`;
+  $('#oldBtnEmpty').hidden = done || cases.length > 0;
+}
+async function decryptOld(pass) {
+  const enc = new TextEncoder();
+  const base = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64bytes(oldPack.salt), iterations: oldPack.iter, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64bytes(oldPack.iv) }, key, b64bytes(oldPack.ct));
+  return JSON.parse(new TextDecoder().decode(plain)).cases;
+}
+function openOldImport() {
+  const dlg = $('#passDlg');
+  $('#passInput').value = '';
+  $('#passErr').hidden = true;
+  dlg.showModal();
+  $('#passInput').focus();
+}
+$('#oldBtn').addEventListener('click', openOldImport);
+$('#oldBtnEmpty').addEventListener('click', openOldImport);
+$('#passForm').addEventListener('submit', async e => {
+  if (e.submitter && e.submitter.value === 'cancel') return;
+  e.preventDefault();
+  const pass = $('#passInput').value.trim().toLowerCase().replace(/\s+/g, '');
+  if (!pass) return;
+  const btn = $('#passOk');
+  btn.disabled = true; btn.textContent = 'Unlocking…';
+  let list;
+  try { list = await decryptOld(pass); }
+  catch { $('#passErr').textContent = 'Wrong passcode. Check it and try again.'; $('#passErr').hidden = false; btn.disabled = false; btn.textContent = 'Import'; return; }
+  const incoming = list.map(sanitizeCase).filter(Boolean);
+  const have = new Set(cases.map(c => c.id));
+  const toWrite = incoming.filter(c => !have.has(c.id));
+  try { await dbPutMany(toWrite); } catch (err) { toast('Import failed: ' + (err && err.message || err), true); btn.disabled = false; btn.textContent = 'Import'; return; }
+  btn.disabled = false; btn.textContent = 'Import';
+  $('#passDlg').close();
+  prefSet('oldImported', true);
+  await reload();
+  updateOldCard();
+  toast(toWrite.length ? `Imported ${toWrite.length} old cases` : 'All old cases are already in your log');
+  showView('cases');
+});
+
 /* ---------- Init ---------- */
 $$('.tab').forEach(t => t.addEventListener('click', () => showView(t.dataset.view)));
 document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) showView(g.dataset.goto); });
@@ -1166,6 +1231,7 @@ document.addEventListener('click', e => { const g = e.target.closest('[data-goto
   updateBackupInfo();
   try {
     await reload();
+    loadOldPack();
   } catch (err) {
     console.error(err);
     toast('Storage unavailable: ' + (err && err.message || err), true);

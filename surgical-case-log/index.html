@@ -226,6 +226,7 @@
       <div id="emptyState" class="empty" hidden>
         <p>No cases yet.</p>
         <button type="button" class="btn primary" data-goto="add">Add your first case</button>
+        <button type="button" class="btn ghost" id="oldBtnEmpty" hidden style="margin-top:8px">Import my old cases</button>
       </div>
     </section>
 
@@ -261,6 +262,12 @@
         <p class="muted small">Exports use the filters set on the Cases tab (<span id="exportScope">all cases</span>).</p>
         <button type="button" class="btn primary block" id="exportXlsx">Export Excel (.xlsx)</button>
         <button type="button" class="btn primary block" id="exportPdf">Export PDF logbook</button>
+      </div>
+
+      <div class="card highlight" id="oldCard" hidden>
+        <h3>Your old logbook</h3>
+        <p class="muted small" id="oldInfo">AIIMS BBN and Hexa Health cases from your earlier logbooks, stored encrypted.</p>
+        <button type="button" class="btn primary block" id="oldBtn">Import my old cases</button>
       </div>
 
       <div class="card">
@@ -328,6 +335,19 @@
         <button value="merge" class="btn primary">Merge with current cases</button>
         <button value="replace" class="btn danger">Replace all current cases</button>
         <button value="cancel" class="btn ghost">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="passDlg">
+    <form method="dialog" id="passForm">
+      <h3>Import old cases</h3>
+      <p>Enter the passcode from your chat with Claude.</p>
+      <input type="text" id="passInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="xxxx-xxxx-xxxx" aria-label="Passcode">
+      <div class="err" id="passErr" hidden></div>
+      <div class="dlg-actions" style="margin-top:16px">
+        <button value="cancel" class="btn ghost" formnovalidate>Cancel</button>
+        <button value="ok" class="btn primary" id="passOk">Import</button>
       </div>
     </form>
   </dialog>

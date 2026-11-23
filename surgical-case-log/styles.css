@@ -248,3 +248,5 @@ dialog p { margin: 0 0 16px; color: var(--muted); overflow-wrap: anywhere; }
 
 .file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
 .filebtn { position: relative; }
+.card.highlight { border-color: var(--accent); background: var(--accent-soft); }
+.card.highlight .muted { color: var(--text); }

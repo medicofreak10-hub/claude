@@ -1,9 +1,9 @@
 /* Offline cache for Surgical Case Log. Bump VERSION when files change. */
-const VERSION = 'scl-v3';
+const VERSION = 'scl-v4';
 const ASSETS = [
   './', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest',
   'vendor/xlsx.mini.min.js', 'vendor/jspdf.umd.min.js', 'vendor/jspdf.plugin.autotable.min.js',
-  'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png',
+  'data/old-cases.enc.json', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', e => {
