@@ -788,6 +788,368 @@ $('#wipeBtn').addEventListener('click', async () => {
   toast('All cases deleted');
 });
 
+/* ---------- Import from Excel / CSV ---------- */
+const norm = s => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+// Header synonyms -> field. Checked in order; first match wins per column.
+const HEADER_MAP = [
+  ['ageSex', /^(age ?sex|age and sex|age gender|a s)$/],
+  ['date', /^(date|dos|doa|doo|date of (surgery|operation|procedure|admission)|(surgery|operation|op|procedure|surgical) date|dt)$/],
+  ['hospital', /^(hospital|hosp|centre|center|institution|institute|place|site|location|unit)( name)?$/],
+  ['uhid', /^(ip|ipd|uhid|cr|crn|mrd|mrn|ip uhid|uhid ip|ip no uhid)( ?(no|number|num|id))*$|^(hospital|patient|reg|registration|case|file) ?(no|number|num|id)$|^(patient id|id)$/],
+  ['age', /^(age|age yrs|age years|age y)$/],
+  ['sex', /^(sex|gender|m f)$/],
+  ['diagnosis', /^(diagnosis|dx|diag|indication|disease|pre ?op diagnosis|provisional diagnosis|final diagnosis|clinical diagnosis)$/],
+  ['procedure', /^(procedure|procedures|procedure name|surgery|surgery name|operation|operation name|operative procedure|surgery done|procedure done|name of (surgery|operation|procedure))$/],
+  ['category', /^(category|speciality|specialty|system|subspecialty|sub specialty|type of surgery|group|area)$/],
+  ['approach', /^(approach|technique|access|method|open lap|mode)$/],
+  ['setting', /^(elective emergency|elective|emergency|setting|e em|el em|nature|case type|priority|type)$/],
+  ['role', /^(role|my role|surgeon role|level|level of involvement|involvement|participation|performed assisted|p a|p a s|status|capacity)$/],
+  ['asa', /^(asa|asa grade|asa class|asa score)$/],
+  ['duration', /^(duration|duration min|duration mins|duration minutes|time|time min|time taken|operative time|op time|operating time|surgery time)$/],
+  ['bloodLoss', /^(blood loss|blood loss ml|ebl|ebl ml|estimated blood loss|bl)$/],
+  ['cd', /^(cd|clavien|clavien dindo|clavien dindo grade|cd grade|complication grade|grade)$/],
+  ['complication', /^(complication|complications|complication details|post ?op complications?|morbidity)$/],
+  ['outcome', /^(outcome|result|status at discharge|discharge status|disposition)$/],
+  ['notes', /^(notes|note|remarks|remark|comments|comment|details|findings|learning points)$/],
+  ['serial', /^(s ?no|sl ?no|sr ?no|serial|serial no|no|#|sno|slno)$/],
+];
+const FIELD_LABEL = { date: 'Date', hospital: 'Hospital', uhid: 'IP/UHID', age: 'Age', sex: 'Sex', ageSex: 'Age/Sex', diagnosis: 'Diagnosis', procedure: 'Procedure', category: 'Category', approach: 'Approach', setting: 'Elective/Emergency', role: 'Role', asa: 'ASA', duration: 'Duration', bloodLoss: 'Blood loss', cd: 'Clavien-Dindo', complication: 'Complication details', outcome: 'Outcome', notes: 'Notes', serial: '(serial no., ignored)' };
+
+function mapHeaders(headerRow) {
+  const used = new Set();
+  return headerRow.map(h => {
+    const n = norm(h);
+    if (!n) return null;
+    for (const [field, re] of HEADER_MAP) {
+      if (re.test(n) && (!used.has(field) || field === 'notes')) { used.add(field); return field; }
+    }
+    return null;
+  });
+}
+
+function findHeaderRow(rows) {
+  let best = -1, bestScore = 0;
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const m = mapHeaders(rows[i]);
+    const score = m.filter(Boolean).length + (m.includes('procedure') ? 3 : 0) + (m.includes('date') ? 2 : 0);
+    if (score > bestScore) { best = i; bestScore = score; }
+  }
+  return bestScore >= 3 ? best : -1;
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function validYMD(y, m, d) {
+  if (y < 100) y += y < 70 ? 2000 : 1900;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return '';
+  if (y < 1950 || y > 2100) return '';
+  return `${y}-${pad2(m)}-${pad2(d)}`;
+}
+function parseDateValue(v) {
+  if (v == null || v === '') return '';
+  if (v instanceof Date && !isNaN(v)) return isoDate(v);
+  if (typeof v === 'number') {
+    if (v > 18000 && v < 80000) { // Excel serial date
+      const d = new Date(Math.round((v - 25569) * 86400000));
+      return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+    }
+    if (v >= 19500101 && v <= 21001231) { const s = String(v); return validYMD(+s.slice(0, 4), +s.slice(4, 6), +s.slice(6, 8)); }
+    return '';
+  }
+  const s = String(v).trim();
+  let m;
+  if ((m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/))) return validYMD(+m[1], +m[2], +m[3]);
+  // Indian convention: day first (dd/mm/yyyy); fall back to mm/dd if day-first is impossible
+  if ((m = s.match(/^(\d{1,2})[-/.\s](\d{1,2})[-/.\s](\d{2,4})$/))) return validYMD(+m[3], +m[2], +m[1]) || validYMD(+m[3], +m[1], +m[2]);
+  if ((m = s.match(/^(\d{1,2})[-/.\s]*([a-z]{3,9})[-/.,\s]*(\d{2,4})$/i))) {
+    const mi = MONTHS.findIndex(x => m[2].toLowerCase().startsWith(x.toLowerCase()));
+    return mi >= 0 ? validYMD(+m[3], mi + 1, +m[1]) : '';
+  }
+  if ((m = s.match(/^([a-z]{3,9})[-/.\s]*(\d{1,2}),?[-/.\s]*(\d{2,4})$/i))) {
+    const mi = MONTHS.findIndex(x => m[1].toLowerCase().startsWith(x.toLowerCase()));
+    return mi >= 0 ? validYMD(+m[3], mi + 1, +m[2]) : '';
+  }
+  return '';
+}
+
+function parseHospital(v) {
+  const s = norm(v);
+  if (!s) return { hospital: '', hospitalOther: '' };
+  if (/aiims/.test(s)) return { hospital: 'AIIMS BBN', hospitalOther: '' };
+  if (/\bdcms\b|dayanand|dcm s/.test(s)) return { hospital: 'DCMS', hospitalOther: '' };
+  if (/hexa/.test(s)) return { hospital: 'Hexa Health', hospitalOther: '' };
+  return { hospital: 'Other', hospitalOther: String(v).trim().slice(0, 80) };
+}
+function parseSex(v) {
+  const s = norm(v);
+  if (/^(m|male|man|boy)$/.test(s)) return 'M';
+  if (/^(f|female|woman|girl|w)$/.test(s)) return 'F';
+  if (/^(o|other|t|tg|transgender)$/.test(s)) return 'O';
+  return '';
+}
+function parseRole(v) {
+  const s = norm(v);
+  if (!s) return '';
+  if (/^(p|pi|ps|o|op|s1|performed|perform|operated|operator|operating surgeon|surgeon|primary|primary surgeon|independent|independently|done|self|main|chief)\b/.test(s) || /perform|independ|operat/.test(s)) return 'Performed';
+  if (/^(s|su|sup|t|ta|tu|ts|supervised|supervisor|supervising|taught|teaching|trainer|guided)\b/.test(s) || /supervis|taught|teach/.test(s)) return 'Supervised';
+  if (/^(a|as|asst|s2|assist|assisted|assistant|first assistant|second assistant|1st assistant|2nd assistant|observer|observed)\b/.test(s) || /assist|observ/.test(s)) return 'Assisted';
+  return '';
+}
+function parseSetting(v) {
+  const s = norm(v);
+  if (!s) return '';
+  if (/^(em|emer|emerg|emergency|emergent|urgent|e m|er|casualty)$/.test(s) || /emergen|urgent/.test(s)) return 'Emergency';
+  if (/^(e|el|elec|elective|planned|routine|opd|scheduled)$/.test(s) || /elective|planned|routine/.test(s)) return 'Elective';
+  return '';
+}
+function parseApproach(v, procedureText) {
+  const s = norm(v);
+  if (/robot|da vinci|ras/.test(s)) return 'Robotic';
+  if (/endoven|evlt|rfa|evla|vein|laser/.test(s)) return 'Endovenous';
+  if (/lap|scop|mis|tep|tapp|vats|minimal/.test(s)) return 'Laparoscopic';
+  if (/open|conventional|conv/.test(s)) return 'Open';
+  const p = norm(procedureText);
+  if (!p) return '';
+  if (/robot/.test(p)) return 'Robotic';
+  if (/\b(evlt|evla|rfa|endovenous|radiofrequency ablation|glue|vena seal|venaseal|sclerotherapy)\b/.test(p)) return 'Endovenous';
+  if (/\b(lap|laparoscop\w*|tep|tapp|etep|ipom|thoracoscop\w*|vats|scopic)\b/.test(p)) return 'Laparoscopic';
+  return '';
+}
+function parseCategory(v, procedureText, diagnosisText) {
+  const s = norm(v);
+  if (s) {
+    if (/hepat|hpb|biliar|gall|liver|pancrea|hepato/.test(s)) return 'Hepatobiliary';
+    if (/colo|rect|anal|procto|gi lower|lower gi|bowel/.test(s)) return 'Colorectal';
+    if (/breast|mammar/.test(s)) return 'Breast';
+    if (/endocr|thyro|parathy|adrenal/.test(s)) return 'Endocrine';
+    if (/vasc|varic|evlt|vein|venous/.test(s)) return 'Vascular/Varicose (EVLT)';
+    if (/hernia|abdominal wall/.test(s)) return 'Hernia';
+    if (/emerg|trauma|acute/.test(s)) return 'Emergency';
+    if (/other|misc|general/.test(s)) return 'Other';
+  }
+  const t = norm(procedureText + ' ' + diagnosisText);
+  if (/varicos|evlt|evla|saphen|gsv|ssv|venous|vein|rfa|trendelenburg|sepl/.test(t)) return 'Vascular/Varicose (EVLT)';
+  if (/hernia|hernio|tep\b|tapp|etep|ipom|lichtenstein|mesh repair|bassini|desarda|umbilical|incisional|inguinal|epigastric|spigelian/.test(t)) return 'Hernia';
+  if (/thyroid|parathyroid|adrenal|goitre|goiter|hemithyroid|lobectomy thyroid/.test(t)) return 'Endocrine';
+  if (/breast|mastectom|lumpectom|fibroadenoma|mrm\b|bcs\b|wle breast|gynaecomast|gynecomast|nipple|axillary/.test(t)) return 'Breast';
+  if (/chole|gall|cbd|biliar|hepat|liver|whipple|pancrea|choledoch|hydatid|ercp|splenectom|cholang/.test(t)) return 'Hepatobiliary';
+  if (/colect|colon|rect|sigmoid|hartmann|apr\b|stoma|ileostom|colostom|haemorrhoid|hemorrhoid|fissur|fistul|pilonidal|anal|stapled|lar\b|anterior resection|perianal|piles/.test(t)) return 'Colorectal';
+  if (/appendic|laparotom|perforat|obstruction|trauma|ex lap|exploratory|peritonitis|abscess|necrotizing|debridement|emergency/.test(t)) return 'Emergency';
+  return 'Other';
+}
+function parseASA(v) {
+  const s = norm(v).replace(/^asa\s*/, '').replace(/\s*e$/, '');
+  const roman = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV', '5': 'V', '6': 'VI' };
+  if (roman[s]) return roman[s];
+  const up = s.toUpperCase();
+  return ['I', 'II', 'III', 'IV', 'V', 'VI'].includes(up) ? up : '';
+}
+function parseCD(v) {
+  const raw = String(v ?? '').trim();
+  const s = norm(raw).replace(/^(cd|clavien dindo|clavien|grade)\s*/, '').replace(/\s+/g, '');
+  if (!s || /^(0|nil|none|no|na|n a|nill|-|nad|uneventful)$/.test(s) || raw === '-') return raw === '' ? '' : 'None';
+  const map = { '1': 'I', '2': 'II', '3a': 'IIIa', '3b': 'IIIb', '4a': 'IVa', '4b': 'IVb', '5': 'V', '3': 'IIIa', '4': 'IVa' };
+  if (map[s]) return map[s];
+  const r = { i: 'I', ii: 'II', iiia: 'IIIa', iiib: 'IIIb', iva: 'IVa', ivb: 'IVb', v: 'V', iii: 'IIIa', iv: 'IVa' };
+  return r[s] || '';
+}
+function parseOutcome(v) {
+  const s = norm(v);
+  if (!s) return '';
+  if (/death|died|expired|mortality/.test(s)) return 'Death';
+  if (/lama|dama|against/.test(s)) return 'LAMA';
+  if (/refer|transfer/.test(s)) return 'Referred';
+  if (/re ?op|re ?explor|relap/.test(s)) return 'Re-operated';
+  if (/day ?care|same day/.test(s)) return 'Day care';
+  if (/discharg|recover|uneventful|good|fine|stable|satisf/.test(s)) return 'Discharged';
+  return '';
+}
+function parseNum(v, max) {
+  if (v === '' || v == null) return '';
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.]/g, ''));
+  return Number.isFinite(n) && n >= 0 && n <= max ? Math.round(n) : '';
+}
+function parseDuration(v) {
+  if (typeof v === 'number' && v > 0 && v < 1) return Math.round(v * 1440); // Excel time value
+  const s = String(v ?? '').toLowerCase();
+  let m;
+  if ((m = s.match(/(\d+(?:\.\d+)?)\s*h(?:r|rs|our|ours)?\s*(?:(\d+)\s*m)?/))) return Math.round(parseFloat(m[1]) * 60 + (m[2] ? +m[2] : 0));
+  if ((m = s.match(/^(\d{1,2}):(\d{2})$/))) return +m[1] * 60 + +m[2];
+  return parseNum(v, 2000);
+}
+
+function rowToCase(row, mapping, defaults) {
+  const raw = {};
+  mapping.forEach((f, i) => {
+    if (!f || f === 'serial') return;
+    const v = row[i];
+    if (v === '' || v == null) return;
+    if (f === 'notes' && raw.notes) raw.notes += '\n' + v; else if (raw[f] === undefined) raw[f] = v;
+  });
+  const procedure = String(raw.procedure ?? '').trim().slice(0, 200);
+  const diagnosis = String(raw.diagnosis ?? '').trim().slice(0, 200);
+  const date = parseDateValue(raw.date);
+  if (!procedure || !date) return { error: !procedure ? 'no procedure' : 'no/invalid date' };
+  let age = parseNum(raw.age, 120), sex = parseSex(raw.sex);
+  if (raw.ageSex != null) {
+    const m = String(raw.ageSex).match(/(\d{1,3})\s*(?:y|yr|yrs|years)?\s*[/,\s-]*\s*([mfo]|male|female)?/i);
+    if (m) { if (age === '') age = parseNum(m[1], 120); if (!sex && m[2]) sex = parseSex(m[2]); }
+  }
+  const hosp = parseHospital(raw.hospital);
+  const category = parseCategory(raw.category, procedure, diagnosis);
+  let setting = parseSetting(raw.setting);
+  if (!setting && category === 'Emergency') setting = 'Emergency';
+  const role = parseRole(raw.role);
+  const cd = parseCD(raw.cd) || (raw.complication && !/^(nil|none|no|-|na)$/i.test(String(raw.complication).trim()) ? '' : 'None');
+  const unknownRole = raw.role != null && !role ? `Role: ${raw.role}` : '';
+  const unknownCD = raw.cd != null && !parseCD(raw.cd) ? `CD: ${raw.cd}` : '';
+  const extraNotes = [unknownRole, unknownCD].filter(Boolean).join('; ');
+  const c = {
+    date, ...(hosp.hospital ? hosp : { hospital: defaults.hospital, hospitalOther: defaults.hospital === 'Other' ? 'Unspecified' : '' }),
+    age, sex, uhid: String(raw.uhid ?? '').trim().slice(0, 40), diagnosis, procedure, category,
+    approach: parseApproach(raw.approach, procedure), setting, role: role || defaults.role,
+    asa: parseASA(raw.asa), duration: parseDuration(raw.duration), bloodLoss: parseNum(raw.bloodLoss, 20000),
+    cd, complication: String(raw.complication ?? '').trim().replace(/^(nil|none|no|-|na)$/i, '').slice(0, 200),
+    outcome: parseOutcome(raw.outcome),
+    notes: [String(raw.notes ?? '').trim(), extraNotes].filter(Boolean).join('\n').slice(0, 2000),
+  };
+  if (c.complication && c.cd === 'None') c.cd = '';
+  return { c, missingRole: !role, missingHospital: !hosp.hospital };
+}
+
+let pendingImport = null;
+
+function readSheetRows(wb) {
+  // Prefer a sheet called "Cases"/"Log", otherwise the sheet with the most rows.
+  let name = wb.SheetNames.find(n => /case|log/i.test(n));
+  if (!name) name = wb.SheetNames.reduce((a, b) => {
+    const ra = XLSX.utils.decode_range(wb.Sheets[a]['!ref'] || 'A1').e.r, rb = XLSX.utils.decode_range(wb.Sheets[b]['!ref'] || 'A1').e.r;
+    return rb > ra ? b : a;
+  });
+  return { name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '', blankrows: false }) };
+}
+
+$('#importFile').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (typeof XLSX === 'undefined') { toast('Excel library not loaded', true); return; }
+  let wb;
+  try {
+    const buf = await file.arrayBuffer();
+    wb = /\.csv$/i.test(file.name)
+      ? XLSX.read(new TextDecoder().decode(buf), { type: 'string', raw: false, cellDates: false })
+      : XLSX.read(buf, { type: 'array', cellDates: false });
+  } catch (err) {
+    console.error(err);
+    toast('Could not read this file. Save it as .xlsx or .csv and try again.', true);
+    return;
+  }
+  const { name, rows } = readSheetRows(wb);
+  const hi = findHeaderRow(rows);
+  if (hi < 0) { toast('Could not find a header row (need columns like Date and Procedure)', true); return; }
+  const headers = rows[hi].map(h => String(h ?? '').trim());
+  const mapping = mapHeaders(headers);
+  if (!mapping.includes('procedure') || !mapping.includes('date')) {
+    toast('Need at least a Date and a Procedure column. Found: ' + headers.filter(Boolean).join(', ').slice(0, 120), true);
+    return;
+  }
+  const dataRows = rows.slice(hi + 1).filter(r => r.some(v => v !== '' && v != null));
+  pendingImport = { mapping, dataRows, fileName: file.name, sheet: name, headers };
+  showImportPreview();
+});
+
+function computeImport(defaults) {
+  const { mapping, dataRows } = pendingImport;
+  const existingKeys = new Set(cases.map(c => [c.date, norm(c.procedure), norm(c.uhid)].join('|')));
+  const seen = new Set();
+  const out = { ok: [], errors: {}, dupes: 0, missingRole: 0, missingHospital: 0 };
+  dataRows.forEach(r => {
+    const res = rowToCase(r, mapping, defaults);
+    if (res.error) { out.errors[res.error] = (out.errors[res.error] || 0) + 1; return; }
+    const key = [res.c.date, norm(res.c.procedure), norm(res.c.uhid)].join('|');
+    if (existingKeys.has(key) || seen.has(key)) { out.dupes++; return; }
+    seen.add(key);
+    if (res.missingRole) out.missingRole++;
+    if (res.missingHospital) out.missingHospital++;
+    out.ok.push(res.c);
+  });
+  return out;
+}
+
+function showImportPreview() {
+  const { mapping, headers, dataRows, fileName, sheet } = pendingImport;
+  const dlg = $('#importDlg');
+  const defRole = $('#defRole'), defHosp = $('#defHosp');
+  if (!defRole.options.length) {
+    defRole.innerHTML = ROLES.map(r => `<option>${r}</option>`).join('');
+    defHosp.innerHTML = HOSPITALS.map(h => `<option>${h}</option>`).join('');
+  }
+  defRole.value = prefGet('lastRole', '') || 'Performed';
+  defHosp.value = prefGet('lastHospital', '') || 'AIIMS BBN';
+
+  const render = () => {
+    const res = computeImport({ role: defRole.value, hospital: defHosp.value });
+    pendingImport.result = res;
+    const errs = Object.entries(res.errors).map(([k, n]) => `${n} skipped (${k})`);
+    if (res.dupes) errs.push(`${res.dupes} already in your log (skipped)`);
+    $('#importSummary').innerHTML = `<b>${esc(fileName)}</b> (sheet “${esc(sheet)}”): ${dataRows.length} rows found.<br>` +
+      `<b>${res.ok.length} cases ready to import.</b>` + (errs.length ? `<br><span class="warn-text">${esc(errs.join(' · '))}</span>` : '');
+    $('#importMapping').innerHTML = '<div class="lbl">Column matching</div>' + headers.map((h, i) => h ? `<div class="m-row${mapping[i] ? '' : ' unused'}"><span>${esc(h)}</span><span>${mapping[i] ? esc(FIELD_LABEL[mapping[i]]) : 'not used'}</span></div>` : '').join('');
+    $('#defRoleWrap').hidden = !res.missingRole;
+    $('#defHospWrap').hidden = !res.missingHospital;
+    if (res.missingRole) $('#defRoleWrap .lbl').textContent = `Role for ${res.missingRole} row${res.missingRole === 1 ? '' : 's'} without one`;
+    if (res.missingHospital) $('#defHospWrap .lbl').textContent = `Hospital for ${res.missingHospital} row${res.missingHospital === 1 ? '' : 's'} without one`;
+    $('#importSample').innerHTML = res.ok.length ? '<div class="lbl">First rows as they will be saved</div>' + res.ok.slice(0, 3).map(c =>
+      `<div class="s-row"><b>${esc(c.procedure)}</b>${esc(fmtDate(c.date))} · ${esc(hospitalName(c))} · ${esc(c.category)} · ${esc(c.role)}${c.approach ? ' · ' + esc(c.approach) : ''}${ageSex(c) ? ' · ' + esc(ageSex(c)) : ''}${hasComplication(c) ? ' · CD ' + esc(c.cd) : ''}</div>`).join('') : '';
+    $('#importOk').disabled = !res.ok.length;
+    $('#importOk').textContent = res.ok.length ? `Import ${res.ok.length} case${res.ok.length === 1 ? '' : 's'}` : 'Nothing to import';
+  };
+  defRole.onchange = render;
+  defHosp.onchange = render;
+  render();
+  dlg.returnValue = '';
+  dlg.addEventListener('close', async () => {
+    if (dlg.returnValue !== 'ok' || !pendingImport?.result?.ok.length) { pendingImport = null; return; }
+    const now = new Date().toISOString();
+    const items = pendingImport.result.ok.map(c => ({ ...c, id: uid(), createdAt: now, updatedAt: now }));
+    pendingImport = null;
+    try { await dbPutMany(items); } catch (err) { toast('Import failed: ' + (err && err.message || err), true); return; }
+    await reload();
+    toast(`Imported ${items.length} cases`);
+  }, { once: true });
+  dlg.showModal();
+}
+
+$('#templateBtn').addEventListener('click', async () => {
+  if (typeof XLSX === 'undefined') { toast('Excel library not loaded', true); return; }
+  const head = ['Date', 'Hospital', 'IP/UHID', 'Age', 'Sex', 'Diagnosis', 'Procedure', 'Category', 'Approach', 'Elective/Emergency', 'Role', 'ASA', 'Duration (min)', 'Blood loss (mL)', 'Clavien-Dindo', 'Complication details', 'Outcome', 'Notes'];
+  const example = ['15/08/2025', 'AIIMS BBN', '2025081501', 45, 'F', 'Symptomatic cholelithiasis', 'Lap cholecystectomy', 'Hepatobiliary', 'Laparoscopic', 'Elective', 'Performed', 'II', 60, 20, 'None', '', 'Discharged', 'Delete this example row'];
+  const help = [
+    ['Column', 'Allowed values (case-insensitive; blanks are fine except Date and Procedure)'],
+    ['Date', 'dd/mm/yyyy, dd-mm-yyyy, 2025-08-15, 15 Aug 2025, or an Excel date'],
+    ['Hospital', HOSPITALS.join(', ') + ' (any other name is kept as "Other")'],
+    ['Sex', 'M, F, Other'],
+    ['Category', CATEGORIES.join(', ') + ' (if blank, guessed from the procedure)'],
+    ['Approach', APPROACHES.join(', ') + ' (if blank, guessed from the procedure)'],
+    ['Elective/Emergency', 'Elective, Emergency'],
+    ['Role', ROLES.join(', ') + ' (also P / A / S)'],
+    ['ASA', 'I-VI or 1-6'],
+    ['Clavien-Dindo', 'None, I, II, IIIa, IIIb, IVa, IVb, V (or 1, 2, 3a ...)'],
+    ['Outcome', 'Discharged, Day care, Re-operated, Referred, LAMA, Death'],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([head, example]);
+  ws['!cols'] = head.map(h => ({ wch: Math.max(12, h.length + 2) }));
+  const ws2 = XLSX.utils.aoa_to_sheet(help);
+  ws2['!cols'] = [{ wch: 20 }, { wch: 100 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Cases');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Help');
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  await saveBlob(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'surgical-case-log-template.xlsx');
+});
+
 /* ---------- Init ---------- */
 $$('.tab').forEach(t => t.addEventListener('click', () => showView(t.dataset.view)));
 document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) showView(g.dataset.goto); });

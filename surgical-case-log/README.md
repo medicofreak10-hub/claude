@@ -8,6 +8,7 @@ Offline, installable (PWA) logbook for a general surgeon. It is plain HTML/CSS/J
 - Dashboard: total cases, cases per month, and breakdowns by category, role, approach, hospital and Clavien-Dindo grade, plus complication rates.
 - Export to Excel (.xlsx, with Cases and Summary sheets) and a PDF logbook (A4 landscape, summary table and signature block). Both exports respect the active filters.
 - Edit and delete (with confirmation), backup to JSON, and restore by merge or replace.
+- Import old cases from Excel or CSV. Column names are matched automatically, title rows are skipped, and dates in dd/mm/yyyy, ISO, "15 Aug 2024" or Excel format are read. Missing category and approach are guessed from the procedure name. Duplicates are skipped, and a preview is shown before saving. A blank template is available on the Export tab.
 
 ## Run locally
 ```

@@ -264,6 +264,15 @@
       </div>
 
       <div class="card">
+        <h3>Import old cases</h3>
+        <p class="muted small">Import your existing logbook from Excel (.xlsx / .xls) or CSV. Column names like Date, Hospital, UHID, Age, Sex, Diagnosis, Procedure, Category, Approach, Role, ASA, Clavien-Dindo are recognised automatically. You'll see a preview before anything is saved.</p>
+        <label class="btn primary block filebtn">Import from Excel / CSV…
+          <input type="file" id="importFile" accept=".xlsx,.xls,.xlsm,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" hidden>
+        </label>
+        <button type="button" class="btn ghost block" id="templateBtn">Download blank template (.xlsx)</button>
+      </div>
+
+      <div class="card">
         <h3>Logbook details <span class="muted">(PDF header)</span></h3>
         <label class="field"><span class="lbl">Surgeon name</span><input type="text" id="pName" maxlength="80" placeholder="Dr. ..."></label>
         <label class="field"><span class="lbl">Qualification / designation</span><input type="text" id="pDesig" maxlength="120" placeholder="MS (General Surgery), Senior Resident"></label>
@@ -319,6 +328,25 @@
         <button value="merge" class="btn primary">Merge with current cases</button>
         <button value="replace" class="btn danger">Replace all current cases</button>
         <button value="cancel" class="btn ghost">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="importDlg">
+    <form method="dialog">
+      <h3>Import preview</h3>
+      <p id="importSummary"></p>
+      <div id="importMapping" class="mapping"></div>
+      <div id="importDefaults">
+        <label class="field" id="defRoleWrap"><span class="lbl">Role for rows without one</span>
+          <select id="defRole"></select></label>
+        <label class="field" id="defHospWrap"><span class="lbl">Hospital for rows without one</span>
+          <select id="defHosp"></select></label>
+      </div>
+      <div id="importSample" class="sample"></div>
+      <div class="dlg-actions">
+        <button value="cancel" class="btn ghost">Cancel</button>
+        <button value="ok" class="btn primary" id="importOk">Import</button>
       </div>
     </form>
   </dialog>

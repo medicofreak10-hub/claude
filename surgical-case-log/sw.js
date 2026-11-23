@@ -1,5 +1,5 @@
 /* Offline cache for Surgical Case Log. Bump VERSION when files change. */
-const VERSION = 'scl-v1';
+const VERSION = 'scl-v2';
 const ASSETS = [
   './', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest',
   'vendor/xlsx.mini.min.js', 'vendor/jspdf.umd.min.js', 'vendor/jspdf.plugin.autotable.min.js',
