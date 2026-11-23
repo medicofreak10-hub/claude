@@ -245,3 +245,6 @@ dialog p { margin: 0 0 16px; color: var(--muted); overflow-wrap: anywhere; }
 .warn-text { color: var(--warn); }
 @media (prefers-color-scheme: dark) { .warn-text { color: #fdb022; } }
 #importDlg .dlg-actions { position: sticky; bottom: -20px; margin: 0 -20px -20px; padding: 12px 20px 20px; background: var(--surface); border-top: 1px solid var(--line); }
+
+.file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+.filebtn { position: relative; }

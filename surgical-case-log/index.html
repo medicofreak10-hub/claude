@@ -266,8 +266,8 @@
       <div class="card">
         <h3>Import old cases</h3>
         <p class="muted small">Import your existing logbook from Excel (.xlsx / .xls) or CSV. Column names like Date, Hospital, UHID, Age, Sex, Diagnosis, Procedure, Category, Approach, Role, ASA, Clavien-Dindo are recognised automatically. You'll see a preview before anything is saved.</p>
-        <label class="btn primary block filebtn">Import from Excel / CSV…
-          <input type="file" id="importFile" accept=".xlsx,.xls,.xlsm,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" hidden>
+        <label class="btn primary block filebtn">Import from Excel / CSV / backup…
+          <input type="file" id="importFile" class="file-input">
         </label>
         <button type="button" class="btn ghost block" id="templateBtn">Download blank template (.xlsx)</button>
       </div>
@@ -285,7 +285,7 @@
         <p class="muted small" id="backupInfo">Data lives only on this device. Back up regularly.</p>
         <button type="button" class="btn primary block" id="backupBtn">Download backup (.json)</button>
         <label class="btn ghost block filebtn">Restore from backup…
-          <input type="file" id="restoreFile" accept="application/json,.json" hidden>
+          <input type="file" id="restoreFile" class="file-input">
         </label>
       </div>
 

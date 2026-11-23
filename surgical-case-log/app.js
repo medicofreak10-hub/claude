@@ -736,12 +736,16 @@ function sanitizeCase(raw) {
   return c;
 }
 
-$('#restoreFile').addEventListener('change', async e => {
+$('#restoreFile').addEventListener('change', e => {
   const file = e.target.files[0];
   e.target.value = '';
-  if (!file) return;
+  if (file) restoreFromFile(file);
+});
+
+async function restoreFromFile(file) {
+  toast(`Reading ${file.name}…`);
   let data;
-  try { data = JSON.parse(await file.text()); } catch { toast('Not a valid JSON file', true); return; }
+  try { data = JSON.parse((await file.text()).replace(/^\uFEFF/, '')); } catch { toast(`${file.name} is not a backup file. For Excel/CSV use “Import from Excel”.`, true); return; }
   const rawList = Array.isArray(data) ? data : data && Array.isArray(data.cases) ? data.cases : null;
   if (!rawList) { toast('This file is not a Surgical Case Log backup', true); return; }
   const incoming = rawList.map(sanitizeCase).filter(Boolean);
@@ -776,7 +780,7 @@ $('#restoreFile').addEventListener('change', async e => {
     prefSet('profile', p);
     $('#pName').value = p.name; $('#pDesig').value = p.desig; $('#pReg').value = p.reg; $('#pInst').value = p.inst;
   }
-});
+}
 
 $('#wipeBtn').addEventListener('click', async () => {
   if (!cases.length) { toast('No cases to delete'); return; }
@@ -1034,7 +1038,10 @@ $('#importFile').addEventListener('change', async e => {
   const file = e.target.files[0];
   e.target.value = '';
   if (!file) return;
+  const head = (await file.slice(0, 64).text()).replace(/^\uFEFF/, '').trimStart();
+  if (/\.json$/i.test(file.name) || head.startsWith('{') || head.startsWith('[')) { restoreFromFile(file); return; }
   if (typeof XLSX === 'undefined') { toast('Excel library not loaded', true); return; }
+  toast(`Reading ${file.name}…`);
   let wb;
   try {
     const buf = await file.arrayBuffer();
