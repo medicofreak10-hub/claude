@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Surgical Case Log</title>
+  <meta name="description" content="Offline logbook for surgical cases">
+  <meta name="theme-color" content="#0b6e74">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Case Log">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon.svg" alt="" width="28" height="28">
+      <h1>Surgical Case Log</h1>
+    </div>
+    <span id="caseCount" class="pill" aria-live="polite">0 cases</span>
+  </header>
+
+  <main>
+    <!-- ADD / EDIT -->
+    <section id="view-add" class="view active" aria-labelledby="addTitle">
+      <div id="editBanner" class="banner" hidden>
+        <span>Editing case</span>
+        <button type="button" class="btn small ghost" id="cancelEdit">Cancel edit</button>
+      </div>
+      <h2 id="addTitle" class="sr-only">Add case</h2>
+      <form id="caseForm" novalidate autocomplete="off">
+        <input type="hidden" name="id">
+
+        <div class="card">
+          <div class="row2">
+            <label class="field">
+              <span class="lbl">Date <b class="req">*</b></span>
+              <input type="date" name="date" required>
+            </label>
+            <label class="field">
+              <span class="lbl">IP / UHID no.</span>
+              <input type="text" name="uhid" inputmode="text" maxlength="40" placeholder="e.g. 2025123456">
+            </label>
+          </div>
+
+          <div class="field">
+            <span class="lbl">Hospital <b class="req">*</b></span>
+            <div class="chips" data-for="hospital">
+              <label class="chip"><input type="radio" name="hospital" value="AIIMS BBN"><span>AIIMS BBN</span></label>
+              <label class="chip"><input type="radio" name="hospital" value="DCMS"><span>DCMS</span></label>
+              <label class="chip"><input type="radio" name="hospital" value="Hexa Health"><span>Hexa Health</span></label>
+              <label class="chip"><input type="radio" name="hospital" value="Other"><span>Other</span></label>
+            </div>
+            <input type="text" name="hospitalOther" class="mt" placeholder="Hospital name" maxlength="80" hidden>
+          </div>
+
+          <div class="row2">
+            <label class="field">
+              <span class="lbl">Age (yrs)</span>
+              <input type="number" name="age" inputmode="numeric" min="0" max="120" step="1" placeholder="45">
+            </label>
+            <div class="field">
+              <span class="lbl">Sex</span>
+              <div class="chips tight" data-for="sex">
+                <label class="chip"><input type="radio" name="sex" value="M"><span>M</span></label>
+                <label class="chip"><input type="radio" name="sex" value="F"><span>F</span></label>
+                <label class="chip"><input type="radio" name="sex" value="O"><span>Other</span></label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <label class="field">
+            <span class="lbl">Diagnosis</span>
+            <input type="text" name="diagnosis" list="dxList" maxlength="200" placeholder="e.g. Symptomatic cholelithiasis">
+          </label>
+          <label class="field">
+            <span class="lbl">Procedure <b class="req">*</b></span>
+            <input type="text" name="procedure" list="pxList" maxlength="200" required placeholder="e.g. Lap cholecystectomy">
+          </label>
+
+          <div class="field">
+            <span class="lbl">Category <b class="req">*</b></span>
+            <div class="chips" data-for="category">
+              <label class="chip"><input type="radio" name="category" value="Hepatobiliary"><span>Hepatobiliary</span></label>
+              <label class="chip"><input type="radio" name="category" value="Colorectal"><span>Colorectal</span></label>
+              <label class="chip"><input type="radio" name="category" value="Breast"><span>Breast</span></label>
+              <label class="chip"><input type="radio" name="category" value="Endocrine"><span>Endocrine</span></label>
+              <label class="chip"><input type="radio" name="category" value="Vascular/Varicose (EVLT)"><span>Vascular / EVLT</span></label>
+              <label class="chip"><input type="radio" name="category" value="Hernia"><span>Hernia</span></label>
+              <label class="chip"><input type="radio" name="category" value="Emergency"><span>Emergency</span></label>
+              <label class="chip"><input type="radio" name="category" value="Other"><span>Other</span></label>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="lbl">Approach</span>
+            <div class="chips" data-for="approach">
+              <label class="chip"><input type="radio" name="approach" value="Open"><span>Open</span></label>
+              <label class="chip"><input type="radio" name="approach" value="Laparoscopic"><span>Lap</span></label>
+              <label class="chip"><input type="radio" name="approach" value="Robotic"><span>Robotic</span></label>
+              <label class="chip"><input type="radio" name="approach" value="Endovenous"><span>Endovenous</span></label>
+            </div>
+          </div>
+
+          <div>
+            <div class="field">
+              <span class="lbl">Setting</span>
+              <div class="chips tight" data-for="setting">
+                <label class="chip"><input type="radio" name="setting" value="Elective"><span>Elective</span></label>
+                <label class="chip"><input type="radio" name="setting" value="Emergency"><span>Emergency</span></label>
+              </div>
+            </div>
+            <div class="field">
+              <span class="lbl">My role <b class="req">*</b></span>
+              <div class="chips tight" data-for="role">
+                <label class="chip"><input type="radio" name="role" value="Performed"><span>Performed</span></label>
+                <label class="chip"><input type="radio" name="role" value="Assisted"><span>Assisted</span></label>
+                <label class="chip"><input type="radio" name="role" value="Supervised"><span>Supervised</span></label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <details class="card more" id="moreDetails">
+          <summary>Peri-operative details <span class="muted">(optional)</span></summary>
+          <div class="field">
+            <span class="lbl">ASA grade</span>
+            <div class="chips tight" data-for="asa">
+              <label class="chip"><input type="radio" name="asa" value="I"><span>I</span></label>
+              <label class="chip"><input type="radio" name="asa" value="II"><span>II</span></label>
+              <label class="chip"><input type="radio" name="asa" value="III"><span>III</span></label>
+              <label class="chip"><input type="radio" name="asa" value="IV"><span>IV</span></label>
+              <label class="chip"><input type="radio" name="asa" value="V"><span>V</span></label>
+              <label class="chip"><input type="radio" name="asa" value="VI"><span>VI</span></label>
+            </div>
+          </div>
+          <div class="row2">
+            <label class="field">
+              <span class="lbl">Duration (min)</span>
+              <input type="number" name="duration" inputmode="numeric" min="0" max="2000" step="1" placeholder="60">
+            </label>
+            <label class="field">
+              <span class="lbl">Blood loss (mL)</span>
+              <input type="number" name="bloodLoss" inputmode="numeric" min="0" max="20000" step="1" placeholder="50">
+            </label>
+          </div>
+          <div class="field">
+            <span class="lbl">Complication (Clavien-Dindo)</span>
+            <div class="chips tight" data-for="cd">
+              <label class="chip"><input type="radio" name="cd" value="None"><span>None</span></label>
+              <label class="chip"><input type="radio" name="cd" value="I"><span>I</span></label>
+              <label class="chip"><input type="radio" name="cd" value="II"><span>II</span></label>
+              <label class="chip"><input type="radio" name="cd" value="IIIa"><span>IIIa</span></label>
+              <label class="chip"><input type="radio" name="cd" value="IIIb"><span>IIIb</span></label>
+              <label class="chip"><input type="radio" name="cd" value="IVa"><span>IVa</span></label>
+              <label class="chip"><input type="radio" name="cd" value="IVb"><span>IVb</span></label>
+              <label class="chip"><input type="radio" name="cd" value="V"><span>V</span></label>
+            </div>
+            <input type="text" name="complication" class="mt" maxlength="200" placeholder="Complication details (if any)" hidden>
+          </div>
+          <div class="field">
+            <span class="lbl">Outcome</span>
+            <div class="chips tight" data-for="outcome">
+              <label class="chip"><input type="radio" name="outcome" value="Discharged"><span>Discharged</span></label>
+              <label class="chip"><input type="radio" name="outcome" value="Day care"><span>Day care</span></label>
+              <label class="chip"><input type="radio" name="outcome" value="Re-operated"><span>Re-operated</span></label>
+              <label class="chip"><input type="radio" name="outcome" value="Referred"><span>Referred</span></label>
+              <label class="chip"><input type="radio" name="outcome" value="LAMA"><span>LAMA</span></label>
+              <label class="chip"><input type="radio" name="outcome" value="Death"><span>Death</span></label>
+            </div>
+          </div>
+          <label class="field">
+            <span class="lbl">Notes</span>
+            <textarea name="notes" rows="3" maxlength="2000" placeholder="Key steps, findings, learning points"></textarea>
+          </label>
+        </details>
+
+        <div class="form-actions">
+          <button type="button" class="btn ghost" id="resetBtn">Clear</button>
+          <button type="submit" class="btn primary" id="saveBtn">Save case</button>
+        </div>
+        <datalist id="dxList"></datalist>
+        <datalist id="pxList"></datalist>
+      </form>
+    </section>
+
+    <!-- CASES -->
+    <section id="view-cases" class="view" aria-labelledby="casesTitle">
+      <h2 id="casesTitle" class="sr-only">Cases</h2>
+      <div class="searchbar">
+        <input type="search" id="search" placeholder="Search cases, UHID…" aria-label="Search cases">
+        <button type="button" class="btn icon" id="filterToggle" aria-expanded="false" aria-controls="filters">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4-2v-4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+          <span class="sr-only">Filters</span><span class="dot" id="filterDot" hidden></span>
+        </button>
+      </div>
+      <div id="filters" class="card filters" hidden>
+        <div class="row2">
+          <label class="field"><span class="lbl">From</span><input type="date" id="fFrom"></label>
+          <label class="field"><span class="lbl">To</span><input type="date" id="fTo"></label>
+        </div>
+        <div class="chips tight presets">
+          <button type="button" class="chip-btn" data-preset="month">This month</button>
+          <button type="button" class="chip-btn" data-preset="year">This year</button>
+          <button type="button" class="chip-btn" data-preset="12m">Last 12 mo</button>
+          <button type="button" class="chip-btn" data-preset="all">All time</button>
+        </div>
+        <label class="field"><span class="lbl">Category</span>
+          <select id="fCategory"><option value="">All categories</option></select></label>
+        <div class="row2">
+          <label class="field"><span class="lbl">Role</span>
+            <select id="fRole"><option value="">All roles</option></select></label>
+          <label class="field"><span class="lbl">Hospital</span>
+            <select id="fHospital"><option value="">All hospitals</option></select></label>
+        </div>
+        <button type="button" class="btn ghost block" id="clearFilters">Clear filters</button>
+      </div>
+      <p class="resultline"><span id="resultCount">0 cases</span></p>
+      <div id="caseList" class="list"></div>
+      <div id="emptyState" class="empty" hidden>
+        <p>No cases yet.</p>
+        <button type="button" class="btn primary" data-goto="add">Add your first case</button>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section id="view-dash" class="view" aria-labelledby="dashTitle">
+      <h2 id="dashTitle" class="sr-only">Dashboard</h2>
+      <div id="dashFilterNote" class="banner info" hidden>
+        <span>Filters from Cases tab are applied</span>
+        <button type="button" class="btn small ghost" id="dashClear">Show all</button>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="tile-v" id="tTotal">0</div><div class="tile-l">Total cases</div></div>
+        <div class="tile"><div class="tile-v" id="tPerformed">0</div><div class="tile-l">Performed</div></div>
+        <div class="tile"><div class="tile-v" id="tComp">0%</div><div class="tile-l">Complications (CD ≥ I)</div></div>
+        <div class="tile"><div class="tile-v" id="tMajor">0%</div><div class="tile-l">Major (CD ≥ III)</div></div>
+      </div>
+      <div class="card">
+        <h3>Cases per month <span class="muted">(last 12 months)</span></h3>
+        <div id="chartMonths" class="colchart"></div>
+      </div>
+      <div class="card"><h3>By category</h3><div id="chartCategory" class="barlist"></div></div>
+      <div class="card"><h3>By role</h3><div id="chartRole" class="barlist"></div></div>
+      <div class="card"><h3>By approach</h3><div id="chartApproach" class="barlist"></div></div>
+      <div class="card"><h3>By hospital</h3><div id="chartHospital" class="barlist"></div></div>
+      <div class="card"><h3>Clavien-Dindo grades</h3><div id="chartCD" class="barlist"></div></div>
+    </section>
+
+    <!-- MORE -->
+    <section id="view-more" class="view" aria-labelledby="moreTitle">
+      <h2 id="moreTitle" class="sr-only">Export and backup</h2>
+      <div class="card">
+        <h3>Export logbook</h3>
+        <p class="muted small">Exports use the filters set on the Cases tab (<span id="exportScope">all cases</span>).</p>
+        <button type="button" class="btn primary block" id="exportXlsx">Export Excel (.xlsx)</button>
+        <button type="button" class="btn primary block" id="exportPdf">Export PDF logbook</button>
+      </div>
+
+      <div class="card">
+        <h3>Logbook details <span class="muted">(PDF header)</span></h3>
+        <label class="field"><span class="lbl">Surgeon name</span><input type="text" id="pName" maxlength="80" placeholder="Dr. ..."></label>
+        <label class="field"><span class="lbl">Qualification / designation</span><input type="text" id="pDesig" maxlength="120" placeholder="MS (General Surgery), Senior Resident"></label>
+        <label class="field"><span class="lbl">Medical council reg. no.</span><input type="text" id="pReg" maxlength="40"></label>
+        <label class="field"><span class="lbl">Department / institution</span><input type="text" id="pInst" maxlength="120" placeholder="Dept. of General Surgery"></label>
+      </div>
+
+      <div class="card">
+        <h3>Backup &amp; restore</h3>
+        <p class="muted small" id="backupInfo">Data lives only on this device. Back up regularly.</p>
+        <button type="button" class="btn primary block" id="backupBtn">Download backup (.json)</button>
+        <label class="btn ghost block filebtn">Restore from backup…
+          <input type="file" id="restoreFile" accept="application/json,.json" hidden>
+        </label>
+      </div>
+
+      <div class="card">
+        <h3>About</h3>
+        <p class="muted small">Works offline. No login, no server: cases are stored in this browser only. Do not record patient names. Install via your browser menu → “Add to Home screen”.</p>
+        <p class="muted small" id="storageInfo"></p>
+        <button type="button" class="btn danger-ghost block" id="wipeBtn">Delete all cases…</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Main">
+    <button type="button" class="tab active" data-view="add" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>Add</button>
+    <button type="button" class="tab" data-view="cases">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>Cases</button>
+    <button type="button" class="tab" data-view="dash">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>Dashboard</button>
+    <button type="button" class="tab" data-view="more">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>Export</button>
+  </nav>
+
+  <dialog id="confirmDlg">
+    <form method="dialog">
+      <h3 id="confirmTitle">Are you sure?</h3>
+      <p id="confirmMsg"></p>
+      <div class="dlg-actions">
+        <button value="cancel" class="btn ghost" id="confirmCancel">Cancel</button>
+        <button value="ok" class="btn danger" id="confirmOk">Delete</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="restoreDlg">
+    <form method="dialog">
+      <h3>Restore backup</h3>
+      <p id="restoreMsg"></p>
+      <div class="dlg-actions col">
+        <button value="merge" class="btn primary">Merge with current cases</button>
+        <button value="replace" class="btn danger">Replace all current cases</button>
+        <button value="cancel" class="btn ghost">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="vendor/xlsx.mini.min.js" defer></script>
+  <script src="vendor/jspdf.umd.min.js" defer></script>
+  <script src="vendor/jspdf.plugin.autotable.min.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
